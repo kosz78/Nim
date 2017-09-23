@@ -631,7 +631,7 @@ type
     mPointer, mEmptySet, mIntSetBaseType, mNil, mExpr, mStmt, mTypeDesc,
     mVoidType, mPNimrodNode, mShared, mGuarded, mLock, mSpawn, mDeepCopy,
     mIsMainModule, mCompileDate, mCompileTime, mProcCall,
-    mCpuEndian, mHostOS, mHostCPU, mAppType,
+    mCpuEndian, mHostOS, mHostCPU, mBuildOS, mBuildCPU, mAppType,
     mNaN, mInf, mNegInf,
     mCompileOption, mCompileOptionArg,
     mNLen, mNChild, mNSetChild, mNAdd, mNAddMultiple, mNDel, mNKind,
@@ -1005,6 +1005,12 @@ proc safeLen*(n: PNode): int {.inline.} =
   ## works even for leaves.
   if n.kind in {nkNone..nkNilLit} or isNil(n.sons): result = 0
   else: result = len(n.sons)
+
+proc safeArrLen*(n: PNode): int {.inline.} =
+  ## works for array-like objects (strings passed as openArray in VM).
+  if n.kind in {nkStrLit..nkTripleStrLit}:result = len(n.strVal)
+  elif n.kind in {nkNone..nkFloat128Lit}: result = 0
+  else: result = len(n)
 
 proc add*(father, son: PNode) =
   assert son != nil
