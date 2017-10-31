@@ -280,7 +280,7 @@ proc execProcesses*(cmds: openArray[string],
   ## executes the commands `cmds` in parallel. Creates `n` processes
   ## that execute in parallel. The highest return value of all processes
   ## is returned. Runs `beforeRunEvent` before running each command.
-  when defined(posix):
+  when false:
     # poParentStreams causes problems on Posix, so we simply disable it:
     var options = options - {poParentStreams}
 
@@ -410,13 +410,11 @@ when defined(Windows) and not defined(useNimRtl):
     result.readDataImpl = hsReadData
     result.writeDataImpl = hsWriteData
 
-  proc buildCommandLine(a: string, args: openArray[string]): cstring =
-    var res = quoteShell(a)
+  proc buildCommandLine(a: string, args: openArray[string]): string =
+    result = quoteShell(a)
     for i in 0..high(args):
-      res.add(' ')
-      res.add(quoteShell(args[i]))
-    result = cast[cstring](alloc0(res.len+1))
-    copyMem(result, cstring(res), res.len)
+      result.add(' ')
+      result.add(quoteShell(args[i]))
 
   proc buildEnv(env: StringTableRef): tuple[str: cstring, len: int] =
     var L = 0
@@ -540,11 +538,13 @@ when defined(Windows) and not defined(useNimRtl):
       result.errHandle = FileHandle(si.hStdError)
 
     var cmdl: cstring
+    var cmdRoot: string
     if poEvalCommand in options:
       cmdl = command
       assert args.len == 0
     else:
-      cmdl = buildCommandLine(command, args)
+      cmdRoot = buildCommandLine(command, args)
+      cmdl = cstring(cmdRoot)
     var wd: cstring = nil
     var e = (str: nil.cstring, len: -1)
     if len(workingDir) > 0: wd = workingDir
@@ -617,6 +617,7 @@ when defined(Windows) and not defined(useNimRtl):
     var res: int32
     discard getExitCodeProcess(p.fProcessHandle, res)
     result = res
+    p.exitStatus = res
     discard closeHandle(p.fProcessHandle)
 
   proc peekExitCode(p: Process): int =
@@ -625,6 +626,7 @@ when defined(Windows) and not defined(useNimRtl):
     else:
       var res: int32
       discard getExitCodeProcess(p.fProcessHandle, res)
+      if res == 0: return p.exitStatus
       return res
 
   proc inputStream(p: Process): Stream =

@@ -70,6 +70,9 @@ proc newTupleAccessRaw*(tup: PNode, i: int): PNode =
   lit.intVal = i
   addSon(result, lit)
 
+proc newTryFinally*(body, final: PNode): PNode =
+  result = newTree(nkTryStmt, body, newTree(nkFinally, final))
+
 proc lowerTupleUnpackingForAsgn*(n: PNode; owner: PSym): PNode =
   let value = n.lastSon
   result = newNodeI(nkStmtList, n.info)
@@ -137,6 +140,14 @@ proc rawIndirectAccess*(a: PNode; field: PSym; info: TLineInfo): PNode =
   result = newNodeI(nkDotExpr, info)
   addSon(result, deref)
   addSon(result, newSymNode(field))
+  result.typ = field.typ
+
+proc rawDirectAccess*(obj, field: PSym): PNode =
+  # returns a.field as a node
+  assert field.kind == skField
+  result = newNodeI(nkDotExpr, field.info)
+  addSon(result, newSymNode obj)
+  addSon(result, newSymNode field)
   result.typ = field.typ
 
 proc lookupInRecord(n: PNode, id: int): PSym =
@@ -452,7 +463,7 @@ proc setupArgsForConcurrency(n: PNode; objType: PType; scratchObj: PSym,
                              varSection, varInit, result: PNode) =
   let formals = n[0].typ.n
   let tmpName = getIdent(genPrefix)
-  for i in 1 .. <n.len:
+  for i in 1 ..< n.len:
     # we pick n's type here, which hopefully is 'tyArray' and not
     # 'tyOpenArray':
     var argType = n[i].typ.skipTypes(abstractInst)
@@ -508,7 +519,7 @@ proc setupArgsForParallelism(n: PNode; objType: PType; scratchObj: PSym;
   let tmpName = getIdent(genPrefix)
   # we need to copy the foreign scratch object fields into local variables
   # for correctness: These are called 'threadLocal' here.
-  for i in 1 .. <n.len:
+  for i in 1 ..< n.len:
     let n = n[i]
     let argType = skipTypes(if i < formals.len: formals[i].typ else: n.typ,
                             abstractInst)
