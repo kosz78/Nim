@@ -322,7 +322,7 @@ proc `..`*[T, U](a: T, b: U): HSlice[T, U] {.noSideEffect, inline, magic: "DotDo
   result.b = b
 
 proc `..`*[T](b: T): HSlice[int, T] {.noSideEffect, inline, magic: "DotDot".} =
-  ## `slice`:idx: operator that constructs an interval ``[default(T), b]``
+  ## `slice`:idx: operator that constructs an interval ``[default(int), b]``
   result.b = b
 
 when not defined(niminheritable):
@@ -1167,7 +1167,7 @@ proc contains*[T](x: set[T], y: T): bool {.magic: "InSet", noSideEffect.}
   ## is achieved by reversing the parameters for ``contains``; ``in`` then
   ## passes its arguments in reverse order.
 
-proc contains*[T](s: HSlice[T, T], value: T): bool {.noSideEffect, inline.} =
+proc contains*[U, V, W](s: HSlice[U, V], value: W): bool {.noSideEffect, inline.} =
   ## Checks if `value` is within the range of `s`; returns true iff
   ## `value >= s.a and value <= s.b`
   ##
@@ -1985,34 +1985,80 @@ iterator countdown*[T](a, b: T, step = 1): T {.inline.} =
       yield res
       dec(res, step)
 
-iterator countup*[S, T](a: S, b: T, step = 1): T {.inline.} =
-  ## Counts from ordinal value `a` up to `b` (inclusive) with the given
-  ## step count. `S`, `T` may be any ordinal type, `step` may only
-  ## be positive. **Note**: This fails to count to ``high(int)`` if T = int for
-  ## efficiency reasons.
-  when T is IntLikeForCount:
-    var res = int(a)
-    while res <= int(b):
-      yield T(res)
-      inc(res, step)
-  else:
-    var res: T = T(a)
-    while res <= b:
-      yield res
-      inc(res, step)
+when defined(nimNewRoof):
+  iterator countup*[T](a, b: T, step = 1): T {.inline.} =
+    ## Counts from ordinal value `a` up to `b` (inclusive) with the given
+    ## step count. `S`, `T` may be any ordinal type, `step` may only
+    ## be positive. **Note**: This fails to count to ``high(int)`` if T = int for
+    ## efficiency reasons.
+    when T is IntLikeForCount:
+      var res = int(a)
+      while res <= int(b):
+        yield T(res)
+        inc(res, step)
+    else:
+      var res: T = T(a)
+      while res <= b:
+        yield res
+        inc(res, step)
 
-iterator `..`*[S, T](a: S, b: T): T {.inline.} =
-  ## An alias for `countup`.
-  when T is IntLikeForCount:
-    var res = int(a)
-    while res <= int(b):
-      yield T(res)
-      inc(res)
-  else:
-    var res: T = T(a)
+  iterator `..`*[T](a, b: T): T {.inline.} =
+    ## An alias for `countup`.
+    when T is IntLikeForCount:
+      var res = int(a)
+      while res <= int(b):
+        yield T(res)
+        inc(res)
+    else:
+      var res: T = T(a)
+      while res <= b:
+        yield res
+        inc(res)
+
+  iterator `..`*(a, b: int64): int64 {.inline.} =
+    ## A special version of ``..`` for ``int64`` only.
+    var res = a
     while res <= b:
       yield res
       inc(res)
+
+  iterator `..`*(a, b: int32): int32 {.inline.} =
+    ## A special version of ``..`` for ``int32`` only.
+    var res = a
+    while res <= b:
+      yield res
+      inc(res)
+
+else:
+  iterator countup*[S, T](a: S, b: T, step = 1): T {.inline.} =
+    ## Counts from ordinal value `a` up to `b` (inclusive) with the given
+    ## step count. `S`, `T` may be any ordinal type, `step` may only
+    ## be positive. **Note**: This fails to count to ``high(int)`` if T = int for
+    ## efficiency reasons.
+    when T is IntLikeForCount:
+      var res = int(a)
+      while res <= int(b):
+        yield T(res)
+        inc(res, step)
+    else:
+      var res: T = T(a)
+      while res <= b:
+        yield res
+        inc(res, step)
+
+  iterator `..`*[S, T](a: S, b: T): T {.inline.} =
+    ## An alias for `countup`.
+    when T is IntLikeForCount:
+      var res = int(a)
+      while res <= int(b):
+        yield T(res)
+        inc(res)
+    else:
+      var res: T = T(a)
+      while res <= b:
+        yield res
+        inc(res)
+
 
 iterator `||`*[S, T](a: S, b: T, annotation=""): T {.
   inline, magic: "OmpParFor", sideEffect.} =
@@ -2089,7 +2135,7 @@ proc clamp*[T](x, a, b: T): T =
   if x > b: return b
   return x
 
-proc len*[T: Ordinal](x: HSlice[T, T]): int {.noSideEffect, inline.} =
+proc len*[U: Ordinal; V: Ordinal](x: HSlice[U, V]): int {.noSideEffect, inline.} =
   ## length of ordinal slice, when x.b < x.a returns zero length
   ##
   ## .. code-block:: Nim
@@ -2835,7 +2881,7 @@ when not defined(JS): #and not defined(nimscript):
       fmRead,                   ## Open the file for read access only.
       fmWrite,                  ## Open the file for write access only.
                                 ## If the file does not exist, it will be
-                                ## created.
+                                ## created. Existing files will be cleared!
       fmReadWrite,              ## Open the file for read and write access.
                                 ## If the file does not exist, it will be
                                 ## created. Existing files will be cleared!
@@ -3429,15 +3475,22 @@ template `..^`*(a, b: untyped): untyped =
   ## '..' and '^' is required.
   a .. ^b
 
-template `..<`*(a, b: untyped): untyped {.dirty.} =
+template `..<`*(a, b: untyped): untyped =
   ## a shortcut for 'a..pred(b)'.
   a .. pred(b)
 
-iterator `..<`*[S,T](a: S, b: T): T =
-  var i = T(a)
-  while i < b:
-    yield i
-    inc i
+when defined(nimNewRoof):
+  iterator `..<`*[T](a, b: T): T =
+    var i = T(a)
+    while i < b:
+      yield i
+      inc i
+else:
+  iterator `..<`*[S, T](a: S, b: T): T =
+    var i = T(a)
+    while i < b:
+      yield i
+      inc i
 
 template spliceImpl(s, a, L, b: untyped): untyped =
   # make room for additional elements or cut:
@@ -3493,14 +3546,14 @@ proc `[]`*[Idx, T, U, V](a: array[Idx, T], x: HSlice[U, V]): seq[T] =
   let xa = a ^^ x.a
   let L = (a ^^ x.b) - xa + 1
   result = newSeq[T](L)
-  for i in 0..<L: result[i] = a[Idx(i + xa + int low(a))]
+  for i in 0..<L: result[i] = a[Idx(i + xa)]
 
 proc `[]=`*[Idx, T, U, V](a: var array[Idx, T], x: HSlice[U, V], b: openArray[T]) =
   ## slice assignment for arrays.
   let xa = a ^^ x.a
   let L = (a ^^ x.b) - xa + 1
   if L == b.len:
-    for i in 0..<L: a[Idx(i + xa + int low(a))] = b[i]
+    for i in 0..<L: a[Idx(i + xa)] = b[i]
   else:
     sysFatal(RangeError, "different lengths for slice assignment")
 
@@ -3527,20 +3580,23 @@ proc `[]=`*[T, U, V](s: var seq[T], x: HSlice[U, V], b: openArray[T]) =
   else:
     spliceImpl(s, a, L, b)
 
-proc `[]`*[T](s: openArray[T]; i: BackwardsIndex): T = s[s.len - int(i)]
-proc `[]`*[Idx, T](a: array[Idx, T]; i: BackwardsIndex): T =
-  a[Idx(a.len - int(i) + int low(a))]
-proc `[]`*(s: string; i: BackwardsIndex): char = s[s.len - int(i)]
+proc `[]`*[T](s: openArray[T]; i: BackwardsIndex): T {.inline.} =
+  system.`[]`(s, s.len - int(i))
 
-proc `[]`*[T](s: var openArray[T]; i: BackwardsIndex): var T = s[s.len - int(i)]
-proc `[]`*[Idx, T](a: var array[Idx, T]; i: BackwardsIndex): var T =
+proc `[]`*[Idx, T](a: array[Idx, T]; i: BackwardsIndex): T {.inline.} =
+  a[Idx(a.len - int(i) + int low(a))]
+proc `[]`*(s: string; i: BackwardsIndex): char {.inline.} = s[s.len - int(i)]
+
+proc `[]`*[T](s: var openArray[T]; i: BackwardsIndex): var T {.inline.} =
+  system.`[]`(s, s.len - int(i))
+proc `[]`*[Idx, T](a: var array[Idx, T]; i: BackwardsIndex): var T {.inline.} =
   a[Idx(a.len - int(i) + int low(a))]
 
-proc `[]=`*[T](s: var openArray[T]; i: BackwardsIndex; x: T) =
-  s[s.len - int(i)] = x
-proc `[]=`*[Idx, T](a: var array[Idx, T]; i: BackwardsIndex; x: T) =
+proc `[]=`*[T](s: var openArray[T]; i: BackwardsIndex; x: T) {.inline.} =
+  system.`[]=`(s, s.len - int(i), x)
+proc `[]=`*[Idx, T](a: var array[Idx, T]; i: BackwardsIndex; x: T) {.inline.} =
   a[Idx(a.len - int(i) + int low(a))] = x
-proc `[]=`*(s: var string; i: BackwardsIndex; x: char) =
+proc `[]=`*(s: var string; i: BackwardsIndex; x: char) {.inline.} =
   s[s.len - int(i)] = x
 
 proc slurp*(filename: string): string {.magic: "Slurp".}
