@@ -1693,7 +1693,7 @@ proc genRangeChck(p: BProc, n: PNode, d: var TLoc, magic: string) =
 
 proc genConv(p: BProc, e: PNode, d: var TLoc) =
   let destType = e.typ.skipTypes({tyVar, tyGenericInst, tyAlias})
-  if compareTypes(destType, e.sons[1].typ, dcEqIgnoreDistinct):
+  if sameBackendType(destType, e.sons[1].typ):
     expr(p, e.sons[1], d)
   else:
     genSomeCast(p, e, d)
@@ -1860,7 +1860,10 @@ proc genMagicExpr(p: BProc, e: PNode, d: var TLoc, op: TMagic) =
     initLocExpr(p, e.sons[2], b)
     genDeepCopy(p, a, b)
   of mDotDot, mEqCString: genCall(p, e, d)
-  else: internalError(e.info, "genMagicExpr: " & $op)
+  else:
+    when defined(debugMagics):
+      echo p.prc.name.s, " ", p.prc.id, " ", p.prc.flags, " ", p.prc.ast[genericParamsPos].kind
+    internalError(e.info, "genMagicExpr: " & $op)
 
 proc genSetConstr(p: BProc, e: PNode, d: var TLoc) =
   # example: { a..b, c, d, e, f..g }
